@@ -140,8 +140,6 @@ Now it's reachable from any device on your network at `http://YOUR_PC_IP:5173`.
 
 ## Putting This on Your GitHub (step by step)
 
-I can't push to your account for you, but it's five commands:
-
 ```bash
 # 1. One-time: create an empty repo at github.com/new (name it "trading-bots",
 #    do NOT tick "add README"), then:
@@ -168,7 +166,7 @@ If you ever accidentally push a `.env`, revoke those API keys immediately and ge
 
 ---
 
-## Best Practices You Asked About (the ones people forget)
+## Best Practices
 
 1. **Daily loss circuit breaker** — implemented. Per-trade stops don't protect you from 10 losses in a row.
 2. **Fees + slippage in backtests** — implemented. Ignoring them is the #1 way retail backtests lie. Note our demo run on random data *loses* 0.55% — that's realistic.
