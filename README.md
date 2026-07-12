@@ -149,8 +149,6 @@ Now it's reachable from any device on your network at `http://YOUR_PC_IP:5173`.
 
 ## Putting This on Your GitHub (step by step)
 
-I can't push to your account for you, but it's five commands:
-
 ```bash
 # 1. One-time: create an empty repo at github.com/new (name it "trading-bots",
 #    do NOT tick "add README"), then:
