@@ -1,4 +1,4 @@
-# Trading Bots — SOL (Kraken) + ETF (Alpaca)
+# Trading Bots — Multi-Pair Crypto (Kraken) + ETF (Alpaca)
 
 Two rule-based trading bots with a market scanner, backtesting engine, full test suite, and a React dashboard.
 
@@ -58,7 +58,7 @@ python3 -m pytest test_bots.py -v
 python3 backtest.py --demo
 
 # 6. Backtest on real historical data (export CSV from Kraken/Alpaca)
-python3 backtest.py --csv sol_4h.csv --fee 0.0016 --slippage 0.0005
+python3 backtest.py --csv btc_4h.csv   # any exported OHLCV CSV --fee 0.0016 --slippage 0.0005
 
 # 7. Add your API keys
 cp .env.example .env   # then edit .env with nano
@@ -158,7 +158,7 @@ I can't push to your account for you, but it's five commands:
 cd ~/trading-bots
 git init
 git add .
-git commit -m "Initial commit: SOL + ETF bots with rules, tests, backtest, dashboard"
+git commit -m "Initial commit: multi-pair crypto + ETF bots with rules, tests, backtest, dashboard"
 git branch -M main
 git remote add origin https://github.com/YOUR_USERNAME/trading-bots.git
 git push -u origin main
