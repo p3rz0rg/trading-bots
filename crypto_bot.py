@@ -108,7 +108,18 @@ def get_price(pair: str) -> float:
     return (float(tk["b"][0]) + float(tk["a"][0])) / 2
 
 
+# ── Paper mode ──────────────────────────────────────────────
+# Kraken has no paper-trading account, so PAPER=true simulates fills locally:
+# real public market data, real signals, real journal — but no orders sent
+# and no API keys needed.
+PAPER       = os.getenv("PAPER", "true").lower() == "true"
+PAPER_FEE   = 0.0026                                   # assume taker fee (conservative)
+paper_cash  = float(os.getenv("PAPER_START_EQUITY", "10000"))
+
+
 def portfolio_value_usd() -> float:
+    if PAPER:
+        return paper_cash
     result = api.query_private("Balance")
     if result["error"]:
         raise RuntimeError(f"Balance error: {result['error']}")
@@ -120,6 +131,13 @@ def portfolio_value_usd() -> float:
 
 # ── Orders ──────────────────────────────────────────────────
 def limit_order(pair: str, side: str, qty: float, price: float) -> str:
+    if PAPER:
+        global paper_cash
+        value = qty * price
+        paper_cash += -value * (1 + PAPER_FEE) if side == "buy" else value * (1 - PAPER_FEE)
+        log.info(f"[PAPER] {'📈' if side == 'buy' else '📉'} {side.upper()} {pair}: {qty} @ ${price:.4f} "
+                 f"| simulated cash ${paper_cash:,.2f}")
+        return f"PAPER-{datetime.utcnow():%Y%m%d%H%M%S}"
     result = api.query_private("AddOrder", {
         "pair": pair, "type": side, "ordertype": "limit",
         "price": str(round(price, 4)), "volume": str(qty),
@@ -145,7 +163,11 @@ def kill_switch(positions: dict):
 
 # ── Main loop ───────────────────────────────────────────────
 def run():
-    check_kraken_keys()
+    if PAPER:
+        log.info(f"📄 PAPER MODE — simulated fills, start equity ${paper_cash:,.0f}. No orders reach Kraken.")
+    else:
+        check_kraken_keys()
+        log.warning("⚠️  LIVE MODE — real orders will be placed on Kraken.")
     log.info("=" * 62)
     log.info("Multi-pair Crypto Bot — scanner-driven, same discipline")
     log.info(f"Rules: TP +1% | SL -0.5% | 10% pos | max {rules.MAX_OPEN_CRYPTO} open | "
@@ -259,6 +281,9 @@ if __name__ == "__main__":
     if "--kill" in sys.argv:
         # Positions dict is in-memory; on a cold --kill we cancel orders and
         # sell any non-USD balances at market-adjacent limit prices.
+        if PAPER:
+            raise SystemExit("PAPER mode: nothing to kill — no real orders exist.")
+        check_kraken_keys()
         log.warning("Cold kill: cancelling open orders. Review balances on Kraken manually.")
         open_orders = api.query_private("OpenOrders")
         for txid in open_orders.get("result", {}).get("open", {}):

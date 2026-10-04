@@ -1,52 +1,45 @@
-# RUNBOOK — Running Everything on Linux & Mac
+# RUNBOOK — Day-to-Day Operation
 
-## Is it automatic?
-**Once started, yes:** price fetching, signal checks, entries, 1% take-profits, 0.5% stops, cooldowns, the 10% position cap, the -2% daily circuit breaker, trade journaling, and (with step 5 below) crash/reboot recovery.
-**Still manual:** one-time setup, the first start, restarting after code edits, weekly journal review, and the go-live decision. The scanner is on-demand only — it never auto-trades.
+Short operating guide. Full setup instructions are in README.md.
 
-## 1. Prerequisites
-**Linux:** `sudo apt update && sudo apt install python3 python3-pip python3-venv git nodejs npm -y`
-**Mac:** install [Homebrew](https://brew.sh), then `brew install python node git`
-Need Python 3.10+ and Node 18+.
+## What's automatic
+Once a bot is running: fetching prices, checking signals, entries, +1% take profits, -0.5% stops, cooldowns, the 10% position cap, the -2% daily circuit breaker, and the trade journal. With systemd (Linux) or launchd (Mac), it also restarts after crashes and reboots.
 
-## 2. Setup (identical on both)
+## What's manual
+First-time setup, starting the bots, restarting after code or `.env` changes, the weekly journal review, and the decision to go live. The scanner never trades on its own.
+
+## Starting a session
 ```bash
-git clone https://github.com/YOUR_USERNAME/trading-bots.git
-cd trading-bots
-python3 -m venv venv
+cd ~/trading-bots
 source venv/bin/activate
-pip install pandas numpy python-dotenv krakenex alpaca-py
-cp .env.example .env && nano .env    # KRAKEN_* for crypto, ALPACA_* for ETFs, keep PAPER=true
+python3 test_bots.py
 ```
-
-## 3. Verify before starting anything
+Tests must end with `Ran 38 tests ... OK`. Then start each bot in its own terminal:
 ```bash
-python3 test_bots.py                 # must print: Ran 38 tests ... OK
-python3 backtest.py --demo
-python3 scanner.py --market crypto   # no keys needed
+python3 crypto_bot.py
 ```
-
-## 4. Run the bots
 ```bash
-python3 crypto_bot.py     # terminal 1
-python3 etf_bot.py        # terminal 2
-python3 etf_bot.py --kill # EMERGENCY: flatten all ETF positions
+python3 etf_bot.py
 ```
+Check that the first log lines say `PAPER MODE` unless you've deliberately gone live.
 
-## 5. Always-on / auto-restart
-**Linux (systemd):** see README "systemd" section — `Restart=always` handles crashes and `enable` handles reboots.
-**Mac (launchd):** create `~/Library/LaunchAgents/com.cryptobot.plist` with `KeepAlive=true` and `RunAtLoad=true`, pointing ProgramArguments at `venv/bin/python3` + `crypto_bot.py`, then `launchctl load` it. Disable sleep: `sudo pmset -a sleep 0`.
+## Daily (2 minutes)
+- Linux: `sudo systemctl status cryptobot etfbot`
+- Mac: `launchctl list | grep bot`
+- Check the latest log lines for errors: `tail -n 30 crypto_bot.log`
 
-## 6. Dashboard
-```bash
-npm create vite@latest bot-dashboard -- --template react
-cd bot-dashboard && npm install && npm install recharts
-cp ../trading-bots/dashboard.jsx src/App.jsx
-npm run dev                          # open http://localhost:5173
-```
+## Weekly (15 minutes)
+Open `trade_journal.csv`. Compare the win rate, and the number of stops versus take profits, with the backtest. If reality differs a lot, pause and investigate. Don't change settings while a bot is running.
 
-## 7. Operator routine
-- **Daily (2 min):** bots running? errors in logs?
-- **Weekly (15 min):** review `trade_journal.csv` vs backtest expectations.
-- **Day 90:** if paper results match design → `PAPER=false`, live keys, small size.
-- **Golden rule:** don't understand a trade? Stop first, investigate second.
+## Emergency
+- Stop a bot: Ctrl+C, or `sudo systemctl stop cryptobot` (Linux), or `launchctl unload ~/Library/LaunchAgents/com.cryptobot.plist` (Mac).
+- Close all ETF positions: `python3 etf_bot.py --kill`
+- Crypto in live mode: `python3 crypto_bot.py --kill` cancels open orders. Then check your balances on Kraken and sell manually if needed.
+
+## Going live (only after 90 days of paper trading)
+1. Create live keys. Alpaca live keys start with `AK`; for Kraken, see "Getting your API keys" in the README.
+2. Put them in `.env` and set `PAPER=false`.
+3. Start with a small amount.
+4. Restart the bots and confirm the log says `LIVE MODE`.
+
+Golden rule: if you don't understand why the bot did something, stop it first and investigate second.

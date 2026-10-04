@@ -353,6 +353,8 @@ npm run dev
 ```
 Open `http://localhost:5173`.
 
+**If you only see Vite's "Get started" page:** the dashboard file didn't replace the starter page. Newer Vite versions ask *"Install with npm and start now?"* during setup — answer **No**, otherwise the server starts before the `cp` step runs. To fix an existing project: stop the server (Ctrl+C), run `cp ~/trading-bots/dashboard.jsx src/App.jsx`, check that `head -5 src/App.jsx` mentions `recharts`, run `npm run dev` again, then hard-refresh the browser (Cmd+Shift+R / Ctrl+Shift+R). If `ls src` shows `App.tsx` instead of `App.jsx`, the project was made with the TypeScript template; delete the folder and recreate it with `--template react`.
+
 To view it from your phone on the same Wi-Fi, run `npm run dev -- --host` and visit `http://YOUR_COMPUTER_IP:5173`. Find the IP with `ipconfig getifaddr en0` (Mac) or `hostname -I` (Linux).
 
 The dashboard currently shows **illustrative example data**. It isn't yet connected to `trade_journal.csv`.
@@ -429,6 +431,7 @@ python3 scanner.py --market stocks
 | `Password authentication is not supported` | GitHub needs a token, not your password. See [Putting it on GitHub](#putting-it-on-github). |
 | `Repository not found` / URL contains `YOUR_USERNAME` | Replace `YOUR_USERNAME` with your real username: `git remote set-url origin https://github.com/REALNAME/trading-bots.git` |
 | `cd: no such file or directory: trading-bots` | The clone failed, so the folder doesn't exist. Fix the clone error first. |
+| Dashboard shows only Vite's "Get started" page | The dashboard wasn't copied into `src/App.jsx`. See [Running the dashboard](#running-the-dashboard). |
 | Bot stops overnight | The computer slept. See Mac Step 8, or use systemd on Linux. |
 
 ---
