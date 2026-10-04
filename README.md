@@ -37,7 +37,7 @@ trading-bots/
 
 ---
 
-## Quick Start (Linux)
+## Quick Start (Linux) — Mac users: see "Installation on Mac" below
 
 ```bash
 # 1. Clone your repo (after you push it — see GitHub section below)
@@ -58,7 +58,7 @@ python3 -m pytest test_bots.py -v
 python3 backtest.py --demo
 
 # 6. Backtest on real historical data (export CSV from Kraken/Alpaca)
-python3 backtest.py --csv btc_4h.csv   # any exported OHLCV CSV --fee 0.0016 --slippage 0.0005
+python3 backtest.py --csv btc_4h.csv --fee 0.0016 --slippage 0.0005   # any exported OHLCV CSV
 
 # 7. Add your API keys
 cp .env.example .env   # then edit .env with nano
@@ -147,7 +147,133 @@ Now it's reachable from any device on your network at `http://YOUR_PC_IP:5173`.
 
 ---
 
+## Installation on Mac (step by step)
+
+Works on Apple Silicon (M1–M4) and Intel Macs, macOS 12 or newer. All commands go in the **Terminal** app (Cmd+Space → type "Terminal").
+
+### Step 1 — Install Homebrew (Mac's package manager)
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+At the end, Homebrew prints two "Next steps" commands to add it to your PATH — **copy and run them**. On Apple Silicon they look like:
+```bash
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+If macOS asks to install "Command Line Developer Tools", click Install and wait for it to finish.
+
+### Step 2 — Install Python, Node.js and git
+```bash
+brew install python node git
+
+# Verify
+python3 --version   # need 3.10+
+node --version      # need 18+
+git --version
+```
+Always type `python3` / `pip3` on Mac — plain `python` may not exist or may point elsewhere.
+
+### Step 3 — Get the code
+```bash
+cd ~
+git clone https://github.com/YOUR_USERNAME/trading-bots.git
+cd trading-bots
+```
+(Or unzip the download into your home folder and `cd ~/trading-bots`.)
+
+### Step 4 — Virtual environment + libraries
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install pandas numpy python-dotenv krakenex alpaca-py pytest
+```
+Your prompt now starts with `(venv)`. In every new Terminal window, run `cd ~/trading-bots && source venv/bin/activate` before anything else.
+
+> Seeing `error: externally-managed-environment`? You skipped the venv. Activate it and retry — never use `--break-system-packages` on your own Mac.
+
+### Step 5 — API keys
+```bash
+cp .env.example .env
+nano .env        # fill in keys, keep PAPER=true · save: Ctrl+X → Y → Enter
+```
+Finder hides dot-files; press **Cmd+Shift+.** to see `.env` there.
+
+### Step 6 — Verify, then run
+```bash
+python3 test_bots.py                  # must print: Ran 38 tests ... OK
+python3 backtest.py --demo
+python3 scanner.py --market crypto    # no keys needed
+python3 crypto_bot.py                 # Terminal window 1
+python3 etf_bot.py                    # Terminal window 2 (Cmd+T for a new tab)
+```
+
+### Step 7 — Keep the Mac awake
+A sleeping Mac = a stopped bot. Pick one:
+```bash
+# Option A: only while the bot runs (stops when you close the window)
+caffeinate -i python3 crypto_bot.py
+
+# Option B: never sleep on power (laptops: keep it plugged in)
+sudo pmset -c sleep 0
+```
+Or: System Settings → Battery → Options → "Prevent automatic sleeping on power adapter when the display is off" → ON.
+
+### Step 8 (optional) — Auto-start with launchd
+Create `~/Library/LaunchAgents/com.cryptobot.plist` (replace `YOURUSERNAME` — find it with `whoami`):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.cryptobot</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOURUSERNAME/trading-bots/venv/bin/python3</string>
+    <string>crypto_bot.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/YOURUSERNAME/trading-bots</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/YOURUSERNAME/trading-bots/crypto_bot.out</string>
+  <key>StandardErrorPath</key><string>/Users/YOURUSERNAME/trading-bots/crypto_bot.out</string>
+</dict>
+</plist>
+```
+```bash
+launchctl load ~/Library/LaunchAgents/com.cryptobot.plist     # start + auto-start at login
+launchctl list | grep cryptobot                               # is it running?
+tail -f ~/trading-bots/crypto_bot.log                         # watch live
+launchctl unload ~/Library/LaunchAgents/com.cryptobot.plist   # stop
+```
+Repeat with `com.etfbot.plist` → `etf_bot.py` for the ETF bot. After editing bot code: unload, then load again.
+
+### Step 9 — Dashboard on Mac
+```bash
+cd ~
+npm create vite@latest bot-dashboard -- --template react
+cd bot-dashboard
+npm install
+npm install recharts
+cp ~/trading-bots/dashboard.jsx src/App.jsx
+npm run dev        # open http://localhost:5173
+```
+To view it from your phone on the same Wi-Fi: `npm run dev -- --host`, then visit `http://YOUR_MAC_IP:5173` (find the IP with `ipconfig getifaddr en0`). If macOS asks whether Node may accept incoming connections, click Allow.
+
+### Mac troubleshooting
+| Problem | Fix |
+|---|---|
+| `command not found: brew` | Re-run the two PATH commands from Step 1, then open a new Terminal |
+| `command not found: python` | Use `python3` |
+| `ModuleNotFoundError` | venv not active → `source venv/bin/activate` |
+| `SSL: CERTIFICATE_VERIFY_FAILED` | `pip install --upgrade certifi` inside the venv |
+| Bot stops overnight | Mac slept — see Step 7 |
+| launchd job not running | `cat ~/trading-bots/crypto_bot.out` for the error; check every path in the plist |
+
+---
+
 ## Putting This on Your GitHub (step by step)
+
+I can't push to your account for you, but it's five commands:
 
 ```bash
 # 1. One-time: create an empty repo at github.com/new (name it "trading-bots",
