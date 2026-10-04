@@ -1,226 +1,312 @@
-# Trading Bots — Multi-Pair Crypto (Kraken) + ETF (Alpaca)
+/
 
-Two rule-based trading bots with a market scanner, backtesting engine, full test suite, and a React dashboard.
 
-**How the system fits together:**
-1. **`rules.py`** is the single source of truth — every risk rule lives here as a pure, tested function. Both bots import it; neither can bypass it.
-2. **`scanner.py`** finds opportunities: it scores symbols 0–5 against the entry conditions. Standalone tool AND the engine inside crypto_bot.
-3. **`crypto_bot.py`** trades Kraken: every 15 min it takes the top 30 USD pairs by volume, drops anything failing the liquidity filter ($5M/day volume, 0.2% max spread), and enters ONLY 5/5 scores — max 3 open positions globally.
-4. **`etf_bot.py`** trades Alpaca: fixed 6-ETF universe with VIX regime filtering and PDT protection.
-5. **`backtest.py`** validates strategies on historical data with fees and slippage modeled.
-6. **`dashboard.jsx`** visualizes it all; **`trade_journal.csv`** records every fill from both bots.
+Readme · MD
+Trading Bots — Multi-Pair Crypto (Kraken) + ETF (Alpaca)
 
-## The Rules (hard-coded, enforced everywhere)
+Two rule-based trading bots with a market scanner, backtesting engine, unit tests, and a React dashboard.
 
-| # | Rule | Value |
-|---|------|-------|
-| 1 | Take profit | Exit at exactly **+1%** |
-| 2 | Position size | Max **10%** of portfolio per position |
-| 3 | No overtrading | Crypto: 5/5 signals only, 24h per-pair cooldown, max 2 trades/day, global cap 3 positions, liquidity filter ($5M vol, 0.2% max spread). ETF: 2-day cooldown per symbol + max 4 open positions |
-| 4 | Circuit breaker | Bot **halts** for the day at **-2%** daily loss |
+    Not financial advice. Backtests are simulations. Paper trade for at least 90 days before using real money, and never trade money you can't afford to lose.
 
-Plus: 0.5% stop loss (2:1 reward:risk), VIX regime filter for ETFs (no entries ≥25, halve ≥30, cash ≥40), Pattern Day Trader guard, trade journal CSV, kill switch.
+Contents
 
-## Files
+    How the system fits together
+    The rules
+    Files
+    Paper vs live mode
+    Getting your API keys
+    Installation on Linux
+    Installation on Mac
+    Running the dashboard
+    Putting it on GitHub
+    API costs
+    Market scanner
+    Troubleshooting
+    Best practices
+    Changelog
 
-```
+How the system fits together
+
+    rules.py is the single source of truth. Every risk rule is a pure, tested function. Both bots import it, and neither can bypass it.
+    scanner.py scores symbols 0–5 against the entry conditions. It's a standalone tool and also the engine inside the crypto bot.
+    crypto_bot.py trades on Kraken. Every 15 minutes it takes the top 30 USD pairs by volume, drops any that fail the liquidity filter, and enters only 5/5 scores, with at most 3 positions open across all pairs.
+    etf_bot.py trades on Alpaca: a fixed universe of 6 ETFs with a VIX risk filter and Pattern Day Trader protection.
+    backtest.py tests the strategy on historical data, including fees and slippage.
+    dashboard.jsx shows everything in the browser. trade_journal.csv records every trade from both bots.
+
+The rules
+#	Rule	Value
+1	Take profit	Exit at +1%
+2	Position size	Max 10% of the portfolio per position
+3	No overtrading	Crypto: max 2 trades/day, 24h cooldown per pair, max 3 open positions. ETF: 2-day cooldown per symbol, max 4 open positions
+4	Circuit breaker	No new entries for the rest of the day after a -2% daily loss
+5	Signal quality	Crypto enters only on 5/5 conditions; 4/5 is not a trade
+6	Liquidity	Crypto pairs need $5M+ 24h volume and a spread of 0.2% or less
+
+Also built in: a 0.5% stop loss (2:1 reward to risk), a VIX filter for ETFs (no entries at 25+, halve positions at 30+, all cash at 40+), a Pattern Day Trader guard, the trade journal, and a kill switch.
+Files
+
 trading-bots/
-├── rules.py          # Shared strategy rules (pure logic, fully tested)
-├── crypto_bot.py     # Multi-pair Kraken bot — scanner-driven, top 30 by volume
-├── etf_bot.py        # ETF bot for Alpaca (SPY, QQQ, IWM, XLK, XLV, XLE)
-├── backtest.py       # Backtesting engine — models FEES and SLIPPAGE
-├── scanner.py        # Market scanner — top 30 Kraken pairs / 20 liquid ETFs
-├── test_bots.py      # 38 unit tests (all passing)
-├── dashboard.jsx     # React dashboard (charts, signals, trade log)
-└── README.md         # This file
-```
+├── .env.example      # Template for your keys (copy to .env)
+├── .gitignore        # Keeps .env, logs and the journal off GitHub
+├── README.md         # This file
+├── RUNBOOK.md        # Short day-to-day operating guide
+├── rules.py          # All risk rules (pure logic, fully tested)
+├── crypto_bot.py     # Multi-pair Kraken bot, scanner-driven
+├── etf_bot.py        # Alpaca ETF bot (SPY, QQQ, IWM, XLK, XLV, XLE)
+├── scanner.py        # Market scanner: top 30 Kraken pairs / 20 liquid ETFs
+├── backtest.py       # Backtesting engine with fees and slippage
+├── test_bots.py      # 38 unit tests
+└── dashboard.jsx     # React dashboard
 
----
+Files created while running (never commit these): .env, trade_journal.csv, *.log, *.out, venv/.
+Paper vs live mode
 
-## Quick Start (Linux) — Mac users: see "Installation on Mac" below
+Both bots read PAPER from .env, and it defaults to true.
+	PAPER=true (default)	PAPER=false
+ETF bot	Uses Alpaca's paper account with fake money. Needs paper keys (start with PK).	Real money. Needs live keys (start with AK).
+Crypto bot	Kraken has no paper account, so the bot simulates fills locally: real prices and signals, nothing sent to Kraken. No keys needed. Starting balance is $10,000 (change with PAPER_START_EQUITY=).	Real orders on Kraken with your real balance.
 
-```bash
-# 1. Clone your repo (after you push it — see GitHub section below)
+The bot prints which mode it's in at startup. If you ever see ⚠️ LIVE MODE when you didn't expect it, press Ctrl+C immediately.
+
+Note: in crypto paper mode the simulated balance resets every time the bot restarts. The trade journal keeps the full history.
+Getting your API keys
+
+You only need keys for the bot you're running.
+Kraken (crypto bot, live mode only)
+
+    Log in at kraken.com → Settings → API → Create API key.
+    Permissions: tick Query Funds and Create & Modify Orders only. Never tick Withdraw.
+    Copy the API Key and the Private Key. The Private Key is about 88 characters and often ends in ==. It's shown only once.
+
+Alpaca (ETF bot and stock scanner)
+
+    Log in at alpaca.markets and switch to the Paper Trading account (top left).
+    Use the Trading API, not the Broker API. The Broker API is for companies building their own brokerage apps.
+    On the dashboard, find the API Keys panel → Generate New Keys.
+    Copy the Key (starts with PK for paper) and the Secret. The Secret is shown only once.
+
+Your .env file
+bash
+
+cp .env.example .env
+nano .env
+
+KRAKEN_API_KEY=your-kraken-api-key
+KRAKEN_SECRET_KEY=your-kraken-private-key
+ALPACA_API_KEY=PKxxxxxxxxxxxxxxxx
+ALPACA_SECRET_KEY=your-alpaca-secret
+PAPER=true
+
+    Kraken and Alpaca use separate variables. Don't put Alpaca keys in the Kraken lines.
+    No quotes and no spaces around =.
+    Save in nano with Ctrl+X → Y → Enter.
+
+Installation on Linux
+
+Tested on Ubuntu, Debian and Raspberry Pi OS.
+
+1. Install the tools
+bash
+
+sudo apt update
+sudo apt install python3 python3-pip python3-venv git -y
+python3 --version
+
+You need Python 3.10 or newer.
+
+2. Get the code
+bash
+
+cd ~
 git clone https://github.com/YOUR_USERNAME/trading-bots.git
 cd trading-bots
 
-# 2. Virtual environment
+Replace YOUR_USERNAME with your real GitHub username. Or unzip the download into your home folder and cd ~/trading-bots.
+
+3. Virtual environment and libraries
+bash
+
 python3 -m venv venv
 source venv/bin/activate
-
-# 3. Install dependencies
 pip install pandas numpy python-dotenv krakenex alpaca-py pytest
 
-# 4. Run the tests FIRST — never trust untested trading code
-python3 -m pytest test_bots.py -v
+In every new terminal, run cd ~/trading-bots && source venv/bin/activate first.
 
-# 5. Run a demo backtest (synthetic data, no API keys needed)
+4. Add your keys (see Getting your API keys)
+
+5. Verify — run each command separately:
+bash
+
+python3 test_bots.py
+
+It must end with Ran 38 tests ... OK.
+bash
+
 python3 backtest.py --demo
+python3 scanner.py --market crypto
 
-# 6. Backtest on real historical data (export CSV from Kraken/Alpaca)
-python3 backtest.py --csv btc_4h.csv --fee 0.0016 --slippage 0.0005   # any exported OHLCV CSV
+6. Start the bots, each in its own terminal:
+bash
 
-# 7. Add your API keys
-cp .env.example .env   # then edit .env with nano
-```
+python3 crypto_bot.py
 
-`.env` contents:
-```
-API_KEY=your-key-here
-SECRET_KEY=your-secret-here
-PAPER=true
-```
+bash
 
-```bash
-# 8. Run a bot (PAPER mode first — always!)
-python3 etf_bot.py     # or: python3 crypto_bot.py
+python3 etf_bot.py
 
-# Emergency: flatten everything
-python3 etf_bot.py --kill
-```
+Stop a bot with Ctrl+C. Emergency exit for all ETF positions: python3 etf_bot.py --kill.
 
----
+7. Run 24/7 with systemd (optional)
 
-## Running the Dashboard on Linux (step by step)
+Create a service for the crypto bot:
+bash
 
-The dashboard is a React app. Here's the complete beginner path:
+sudo nano /etc/systemd/system/cryptobot.service
 
-### Step 1 — Install Node.js
-```bash
-# Ubuntu / Debian / Raspberry Pi OS
-sudo apt update && sudo apt install nodejs npm -y
+Paste this, replacing YOUR_USERNAME (find it with whoami):
+ini
 
-# Verify (need Node 18+)
-node --version
-```
-If your distro ships an old Node, install a current one:
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install nodejs -y
-```
-
-### Step 2 — Create a React app with Vite
-```bash
-cd ~
-npm create vite@latest bot-dashboard -- --template react
-cd bot-dashboard
-npm install
-npm install recharts
-```
-
-### Step 3 — Drop in the dashboard
-```bash
-# Copy dashboard.jsx over the default App.jsx
-cp ~/trading-bots/dashboard.jsx src/App.jsx
-```
-
-### Step 4 — Run it
-```bash
-npm run dev
-```
-Open the URL it prints (usually `http://localhost:5173`) in your browser. Done.
-
-### Step 5 (optional) — Keep it running 24/7 with systemd
-```bash
-sudo nano /etc/systemd/system/bot-dashboard.service
-```
-Paste (replace YOUR_USERNAME):
-```ini
 [Unit]
-Description=Trading Bot Dashboard
-After=network.target
+Description=Crypto Trading Bot
+After=network-online.target
 
 [Service]
 User=YOUR_USERNAME
-WorkingDirectory=/home/YOUR_USERNAME/bot-dashboard
-ExecStart=/usr/bin/npm run dev -- --host
+WorkingDirectory=/home/YOUR_USERNAME/trading-bots
+ExecStart=/home/YOUR_USERNAME/trading-bots/venv/bin/python3 crypto_bot.py
 Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-```
-```bash
+
+Start it and make it start on boot:
+bash
+
 sudo systemctl daemon-reload
-sudo systemctl enable --now bot-dashboard
-```
-Now it's reachable from any device on your network at `http://YOUR_PC_IP:5173`.
+sudo systemctl enable --now cryptobot
 
----
+Repeat with etfbot.service and etf_bot.py for the ETF bot.
 
-## Installation on Mac (step by step)
+Daily commands:
+bash
 
-Works on Apple Silicon (M1–M4) and Intel Macs, macOS 12 or newer. All commands go in the **Terminal** app (Cmd+Space → type "Terminal").
+sudo systemctl status cryptobot
+sudo journalctl -u cryptobot -f
+sudo systemctl restart cryptobot
+sudo systemctl stop cryptobot
 
-### Step 1 — Install Homebrew (Mac's package manager)
-```bash
+Restart the service after every code or .env change.
+Installation on Mac
+
+Works on Apple Silicon (M1–M4) and Intel Macs, macOS 12 or newer. All commands go in the Terminal app (Cmd+Space → type "Terminal").
+Step 1 — Install Homebrew
+bash
+
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-At the end, Homebrew prints two "Next steps" commands to add it to your PATH — **copy and run them**. On Apple Silicon they look like:
-```bash
+
+At the end, Homebrew prints "Next steps" commands to add it to your PATH. Copy and run them. On Apple Silicon they look like:
+bash
+
 echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"
-```
-If macOS asks to install "Command Line Developer Tools", click Install and wait for it to finish.
 
-### Step 2 — Install Python, Node.js and git
-```bash
+If macOS asks to install "Command Line Developer Tools", click Install and wait.
+Step 2 — Allow comments in pasted commands
+
+The Mac Terminal (zsh) treats # as normal text by default, so a pasted line like python3 test_bots.py  # note breaks. Turn comment support on once:
+bash
+
+echo 'setopt interactivecomments' >> ~/.zshrc
+source ~/.zshrc
+
+Step 3 — Install Python, Node.js and git
+bash
+
 brew install python node git
 
-# Verify
-python3 --version   # need 3.10+
-node --version      # need 18+
-git --version
-```
-Always type `python3` / `pip3` on Mac — plain `python` may not exist or may point elsewhere.
+Check the versions:
+bash
 
-### Step 3 — Get the code
-```bash
+$(brew --prefix)/bin/python3 --version
+node --version
+
+Python should be 3.12 or newer and Node 18 or newer. Always type python3, not python.
+Step 4 — Get the code
+bash
+
 cd ~
 git clone https://github.com/YOUR_USERNAME/trading-bots.git
 cd trading-bots
-```
-(Or unzip the download into your home folder and `cd ~/trading-bots`.)
 
-### Step 4 — Virtual environment + libraries
-```bash
-python3 -m venv venv
+Or unzip the download into your home folder and cd ~/trading-bots.
+Step 5 — Virtual environment and libraries
+
+Create the venv with Homebrew's Python, not the old Python 3.9 that comes with Apple's developer tools:
+bash
+
+$(brew --prefix)/bin/python3 -m venv venv
+source venv/bin/activate
+python3 --version
+pip install pandas numpy python-dotenv krakenex alpaca-py pytest
+
+Your prompt now starts with (venv). In every new Terminal window, run cd ~/trading-bots && source venv/bin/activate first.
+
+If python3 --version inside the venv says 3.9, rebuild it:
+bash
+
+deactivate
+rm -rf venv
+$(brew --prefix)/bin/python3 -m venv venv
 source venv/bin/activate
 pip install pandas numpy python-dotenv krakenex alpaca-py pytest
-```
-Your prompt now starts with `(venv)`. In every new Terminal window, run `cd ~/trading-bots && source venv/bin/activate` before anything else.
 
-> Seeing `error: externally-managed-environment`? You skipped the venv. Activate it and retry — never use `--break-system-packages` on your own Mac.
+Step 6 — Add your keys
 
-### Step 5 — API keys
-```bash
-cp .env.example .env
-nano .env        # fill in keys, keep PAPER=true · save: Ctrl+X → Y → Enter
-```
-Finder hides dot-files; press **Cmd+Shift+.** to see `.env` there.
+See Getting your API keys. Finder hides .env; press Cmd+Shift+. to show hidden files.
+Step 7 — Verify, then run
 
-### Step 6 — Verify, then run
-```bash
-python3 test_bots.py                  # must print: Ran 38 tests ... OK
+Run these one at a time:
+bash
+
+python3 test_bots.py
+
+It must end with Ran 38 tests ... OK.
+bash
+
 python3 backtest.py --demo
-python3 scanner.py --market crypto    # no keys needed
-python3 crypto_bot.py                 # Terminal window 1
-python3 etf_bot.py                    # Terminal window 2 (Cmd+T for a new tab)
-```
+python3 scanner.py --market crypto
+python3 crypto_bot.py
 
-### Step 7 — Keep the Mac awake
-A sleeping Mac = a stopped bot. Pick one:
-```bash
-# Option A: only while the bot runs (stops when you close the window)
+For the ETF bot, open a new tab (Cmd+T):
+bash
+
+cd ~/trading-bots && source venv/bin/activate
+python3 etf_bot.py
+
+Step 8 — Keep the Mac awake
+
+A sleeping Mac stops the bot. Either run the bot with caffeinate, which keeps the Mac awake only while it runs:
+bash
+
 caffeinate -i python3 crypto_bot.py
 
-# Option B: never sleep on power (laptops: keep it plugged in)
-sudo pmset -c sleep 0
-```
-Or: System Settings → Battery → Options → "Prevent automatic sleeping on power adapter when the display is off" → ON.
+Or stop the Mac sleeping while it's plugged in:
+bash
 
-### Step 8 (optional) — Auto-start with launchd
-Create `~/Library/LaunchAgents/com.cryptobot.plist` (replace `YOURUSERNAME` — find it with `whoami`):
-```xml
+sudo pmset -c sleep 0
+
+Step 9 — Auto-start with launchd (optional)
+
+Create the file:
+bash
+
+nano ~/Library/LaunchAgents/com.cryptobot.plist
+
+Paste this, replacing YOURUSERNAME (find it with whoami):
+xml
+
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -238,107 +324,135 @@ Create `~/Library/LaunchAgents/com.cryptobot.plist` (replace `YOURUSERNAME` — 
   <key>StandardErrorPath</key><string>/Users/YOURUSERNAME/trading-bots/crypto_bot.out</string>
 </dict>
 </plist>
-```
-```bash
-launchctl load ~/Library/LaunchAgents/com.cryptobot.plist     # start + auto-start at login
-launchctl list | grep cryptobot                               # is it running?
-tail -f ~/trading-bots/crypto_bot.log                         # watch live
-launchctl unload ~/Library/LaunchAgents/com.cryptobot.plist   # stop
-```
-Repeat with `com.etfbot.plist` → `etf_bot.py` for the ETF bot. After editing bot code: unload, then load again.
 
-### Step 9 — Dashboard on Mac
-```bash
+Commands:
+bash
+
+launchctl load ~/Library/LaunchAgents/com.cryptobot.plist
+launchctl list | grep cryptobot
+tail -f ~/trading-bots/crypto_bot.log
+launchctl unload ~/Library/LaunchAgents/com.cryptobot.plist
+
+These start the bot (and auto-start it at login), check it's running, watch the log, and stop it. Repeat with com.etfbot.plist and etf_bot.py for the ETF bot. After any code or .env change, unload and load again.
+Running the dashboard
+
+The dashboard is a React app. You need Node.js 18+ (Mac: installed in Step 3; Linux: below).
+
+Linux only — install Node.js:
+bash
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install nodejs -y
+node --version
+
+Both systems:
+bash
+
 cd ~
 npm create vite@latest bot-dashboard -- --template react
 cd bot-dashboard
 npm install
 npm install recharts
 cp ~/trading-bots/dashboard.jsx src/App.jsx
-npm run dev        # open http://localhost:5173
-```
-To view it from your phone on the same Wi-Fi: `npm run dev -- --host`, then visit `http://YOUR_MAC_IP:5173` (find the IP with `ipconfig getifaddr en0`). If macOS asks whether Node may accept incoming connections, click Allow.
+npm run dev
 
-### Mac troubleshooting
-| Problem | Fix |
-|---|---|
-| `command not found: brew` | Re-run the two PATH commands from Step 1, then open a new Terminal |
-| `command not found: python` | Use `python3` |
-| `ModuleNotFoundError` | venv not active → `source venv/bin/activate` |
-| `SSL: CERTIFICATE_VERIFY_FAILED` | `pip install --upgrade certifi` inside the venv |
-| Bot stops overnight | Mac slept — see Step 7 |
-| launchd job not running | `cat ~/trading-bots/crypto_bot.out` for the error; check every path in the plist |
+Open http://localhost:5173.
 
----
+To view it from your phone on the same Wi-Fi, run npm run dev -- --host and visit http://YOUR_COMPUTER_IP:5173. Find the IP with ipconfig getifaddr en0 (Mac) or hostname -I (Linux).
 
-## Putting This on Your GitHub (step by step)
+The dashboard currently shows illustrative example data. It isn't yet connected to trade_journal.csv.
+Putting it on GitHub
+First time
 
-I can't push to your account for you, but it's five commands:
+    Create an empty repo at github.com/new named trading-bots. Choose Private, and do not tick "Add a README".
+    Create a token: GitHub → profile picture → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic). Tick repo, generate, and copy the ghp_... token right away.
+    Push, replacing YOUR_USERNAME with your real username:
 
-```bash
-# 1. One-time: create an empty repo at github.com/new (name it "trading-bots",
-#    do NOT tick "add README"), then:
+bash
 
 cd ~/trading-bots
 git init
 git add .
-git commit -m "Initial commit: multi-pair crypto + ETF bots with rules, tests, backtest, dashboard"
+git status
+git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/YOUR_USERNAME/trading-bots.git
 git push -u origin main
-```
 
-GitHub will ask you to log in — use a Personal Access Token (github.com → Settings → Developer settings → Tokens) as the password.
+When asked, the username is your GitHub username and the password is the token. Nothing appears on screen while you paste it; just press Enter.
 
-**CRITICAL — never commit your keys:**
-```bash
-echo ".env" >> .gitignore
-echo "*.log" >> .gitignore
-echo "trade_journal.csv" >> .gitignore
-git add .gitignore && git commit -m "Ignore secrets and logs"
-```
-If you ever accidentally push a `.env`, revoke those API keys immediately and generate new ones. Assume they're compromised.
+Before committing, check git status. If .env or trade_journal.csv is in the list, stop: the .gitignore file is missing. Copy it from the zip first.
+Updating with a new version
+bash
 
----
+cd ~/trading-bots
+git add -A
+git commit -m "Describe what changed"
+git push
 
-## API Costs — What the Scanner & Bots Actually Cost
+If you pushed your .env by accident
 
-**Kraken (crypto_bot + scanner --market crypto): $0.**
-The scanner uses only Kraken's *public* endpoints (AssetPairs, Ticker, OHLC) — free, no API key needed, no subscription. The only limit is rate (~1 call/sec), which the code already throttles for. You pay Kraken nothing until a trade executes (0.16% maker / 0.26% taker on fills).
+Revoke those keys on Kraken and Alpaca immediately and create new ones. Deleting the file from GitHub isn't enough, because it stays in the history.
+API costs
 
-**Alpaca (etf_bot + scanner --market stocks): $0 on the Basic plan.**
-Every Alpaca account includes the free Basic market-data plan: ~200 API calls/min, real-time quotes from the IEX exchange, and historical bars. Our stock scanner uses ONE batched request for the whole 20-ETF universe, so it barely dents the limit. Trading US stocks/ETFs is commission-free (regulatory fees of a few cents may apply on sells).
+Kraken: $0. The scanner and crypto paper mode use only Kraken's free public data. Kraken charges only when a real order fills: 0.16% maker / 0.26% taker.
 
-**When you'd ever pay:** Alpaca's paid plan (Algo Trader Plus, ~$99/mo) buys full-market (SIP) data instead of IEX-only and higher rate limits. For our strategy — daily bars, 1% targets, a handful of trades per week — the free tier is genuinely sufficient. Don't buy data you don't need.
+Alpaca: $0 on the default Basic plan. It includes about 200 API calls per minute and real-time IEX data. The stock scanner uses one batched request for all 20 ETFs. US stock and ETF trades are commission-free (small regulatory fees may apply on sells). The paid plan (about $99/month) adds full-market data and isn't needed for this strategy.
+Market scanner
 
-**Bottom line:** running the scanner all day, every day, on both markets costs $0 in API fees. Your only trading costs are Kraken's fees on filled crypto orders.
+Scores a wider universe than the bots' watchlists, 0–5 by how many entry conditions pass.
+bash
 
-## Market Scanner
+python3 scanner.py --market crypto
+python3 scanner.py --market stocks
 
-Sweeps a wider universe than the bots' fixed watchlists and ranks setups by signal quality (0–5 conditions met). Rate-limit aware: Kraken calls are throttled to ~1/sec; Alpaca uses one batched request.
+crypto scans the top 30 Kraken USD pairs and needs no keys. stocks scans 20 liquid ETFs and needs your Alpaca keys.
 
-```bash
-python3 scanner.py --market crypto   # top 30 Kraken USD pairs by volume (no keys needed)
-python3 scanner.py --market stocks   # 20 liquid ETFs via Alpaca (needs .env keys)
-```
+🟢 READY means all 5 conditions are met. 🟡 n/5 is watchlist only — never trade partial signals. The scanner on its own never places trades.
+Troubleshooting
+Error	Cause and fix
+unittest.loader._FailedTest / module '__main__' has no attribute '#'	You pasted a command with a # comment on a Mac. Enable comments (Mac Step 2) or run the command without the comment.
+scanner.py: error: unrecognized arguments: # no keys needed	Same cause as above.
+Invalid base64-encoded string	The Kraken secret is wrong. Use the Kraken Private Key in KRAKEN_SECRET_KEY, not an Alpaca secret, with no quotes or spaces. The bot now catches this at startup with a clear message.
+KRAKEN_API_KEY / KRAKEN_SECRET_KEY missing	You're in live mode without Kraken keys. Add them, or set PAPER=true.
+Alpaca unauthorized / forbidden	Paper keys with PAPER=false (or the reverse), or a typo. Paper keys start with PK.
+NotOpenSSLWarning ... LibreSSL	Your venv uses Apple's old Python 3.9. Rebuild it with Homebrew Python (Mac Step 5).
+ModuleNotFoundError	The venv isn't active. Run source venv/bin/activate.
+command not found: brew	Run Homebrew's PATH commands from Mac Step 1, then open a new Terminal.
+command not found: python	Use python3.
+Password authentication is not supported	GitHub needs a token, not your password. See Putting it on GitHub.
+Repository not found / URL contains YOUR_USERNAME	Replace YOUR_USERNAME with your real username: git remote set-url origin https://github.com/REALNAME/trading-bots.git
+cd: no such file or directory: trading-bots	The clone failed, so the folder doesn't exist. Fix the clone error first.
+Bot stops overnight	The computer slept. See Mac Step 8, or use systemd on Linux.
+Best practices
 
-Output: 🟢 READY = all 5 conditions met. 🟡 n/5 = watchlist only — **never trade partial signals**.
+    Daily loss circuit breaker — per-trade stops don't protect you from ten losses in a row.
+    Fees and slippage in backtests — ignoring them is the most common way backtests mislead. The demo run on random data loses 0.55%, which is realistic.
+    Know your edge after fees — a +1% take profit nets roughly +0.5% on Kraken after taker fees both ways. Losses cost more than 0.5% for the same reason.
+    Kill switch — python3 etf_bot.py --kill closes all ETF positions immediately.
+    Trade journal — every trade goes to trade_journal.csv, for taxes and honest review.
+    Fail-safe defaults — if the VIX feed fails, the ETF bot assumes danger and stops entering.
+    Limit orders — cheaper maker fees and less slippage on entries.
+    Paper trade 90 days — both bots default to PAPER=true.
+    Avoid overfitting — tuning parameters until the backtest looks perfect fits noise, not markets. Test on data the strategy hasn't seen.
+    Withdraw permission off — trading keys should never be able to move money out.
+    Alerting — send errors somewhere you'll see them. A silently crashed bot with open positions is the worst case.
 
-To feed scanner picks into the ETF bot, replace its `UNIVERSE` list with ready symbols from `scanner.scan_stocks()`. Keep Rule 3 intact: scanning more symbols must never mean taking more trades — the cooldowns and position caps still apply.
+Changelog
 
-## Best Practices You Asked About (the ones people forget)
+v3.1
 
-1. **Daily loss circuit breaker** — implemented. Per-trade stops don't protect you from 10 losses in a row.
-2. **Fees + slippage in backtests** — implemented. Ignoring them is the #1 way retail backtests lie. Note our demo run on random data *loses* 0.55% — that's realistic.
-3. **Kill switch** — `python3 etf_bot.py --kill` flattens everything instantly.
-4. **Trade journal** — every trade logged to `trade_journal.csv`. You need this for taxes and for honest strategy review.
-5. **Fail-safe defaults** — if the VIX feed fails, the bot assumes danger and stops entering, rather than assuming safety.
-6. **Limit orders, not market orders** — maker fees are cheaper and you avoid slippage on entries.
-7. **Paper trade 90 days minimum** — no exceptions. Both bots default to `PAPER=true`.
-8. **Beware overfitting** — if you tune parameters until the backtest looks perfect, you've fit noise, not markets. Test on data the strategy has never seen (walk-forward testing).
-9. **Withdraw-permission OFF on API keys** — trading keys should never be able to move money out.
-10. **Alerting** — pipe your logs somewhere you'll see them (e.g., a Telegram bot or email on ERROR). A silently-crashed bot with open positions is the nightmare scenario.
+    Kraken and Alpaca keys now use separate variables: KRAKEN_API_KEY, KRAKEN_SECRET_KEY, ALPACA_API_KEY, ALPACA_SECRET_KEY. Update your .env.
+    The crypto bot now has a real paper mode. With PAPER=true it simulates fills and sends nothing to Kraken. Previously it ignored PAPER and would have placed real orders.
+    The crypto bot checks the Kraken key at startup and explains what's wrong instead of crashing.
+    Mac instructions: zsh comment setting, Homebrew Python for the venv, one-command-at-a-time verification.
+    New troubleshooting table covering every error reported so far.
 
-## Disclaimer
+v3.0
+
+    crypto_bot.py replaces sol_bot.py: scans the top 30 pairs and trades only 5/5 signals, with a global cap of 3 positions and a liquidity filter.
+    Rebuilt multi-pair dashboard. 38 tests.
+
+Disclaimer
 
 Not financial advice. Backtests are simulations; live markets include outages, partial fills, and regime changes no simulation captures. Never trade money you can't afford to lose.
