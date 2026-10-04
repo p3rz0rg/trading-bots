@@ -35,8 +35,24 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 api = krakenex.API()
-api.key    = os.getenv("API_KEY")
-api.secret = os.getenv("SECRET_KEY")
+api.key    = (os.getenv("KRAKEN_API_KEY") or "").strip()
+api.secret = (os.getenv("KRAKEN_SECRET_KEY") or "").strip()
+
+
+def check_kraken_keys():
+    """Fail fast with a clear message instead of a cryptic base64 traceback."""
+    import base64, binascii
+    if not api.key or not api.secret:
+        raise SystemExit("❌ KRAKEN_API_KEY / KRAKEN_SECRET_KEY missing from .env")
+    try:
+        base64.b64decode(api.secret, validate=True)
+    except (binascii.Error, ValueError):
+        raise SystemExit(
+            "❌ KRAKEN_SECRET_KEY is not a valid Kraken private key.\n"
+            "   It should be ~88 characters, often ending in '=='.\n"
+            "   Common causes: an Alpaca secret pasted here, a character missing\n"
+            "   from the copy, or quotes/spaces around it. Generate a new key on\n"
+            "   Kraken (Settings → API) and paste the 'Private Key' value.")
 
 JOURNAL          = "trade_journal.csv"
 SCAN_TOP_N       = 30      # pairs to scan, ranked by 24h volume
@@ -129,6 +145,7 @@ def kill_switch(positions: dict):
 
 # ── Main loop ───────────────────────────────────────────────
 def run():
+    check_kraken_keys()
     log.info("=" * 62)
     log.info("Multi-pair Crypto Bot — scanner-driven, same discipline")
     log.info(f"Rules: TP +1% | SL -0.5% | 10% pos | max {rules.MAX_OPEN_CRYPTO} open | "

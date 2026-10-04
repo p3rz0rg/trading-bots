@@ -16,7 +16,7 @@ cd trading-bots
 python3 -m venv venv
 source venv/bin/activate
 pip install pandas numpy python-dotenv krakenex alpaca-py
-cp .env.example .env && nano .env    # add keys, keep PAPER=true
+cp .env.example .env && nano .env    # KRAKEN_* for crypto, ALPACA_* for ETFs, keep PAPER=true
 ```
 
 ## 3. Verify before starting anything

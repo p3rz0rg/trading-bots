@@ -38,8 +38,8 @@ PAPER    = os.getenv("PAPER", "true").lower() == "true"
 UNIVERSE = ["SPY", "QQQ", "IWM", "XLK", "XLV", "XLE"]
 JOURNAL  = "trade_journal.csv"
 
-trading = TradingClient(os.getenv("API_KEY"), os.getenv("SECRET_KEY"), paper=PAPER)
-data    = StockHistoricalDataClient(os.getenv("API_KEY"), os.getenv("SECRET_KEY"))
+trading = TradingClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"), paper=PAPER)
+data    = StockHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
 
 
 # ── Helpers ─────────────────────────────────────────────────

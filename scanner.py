@@ -133,7 +133,7 @@ def scan_stocks(universe: list[str] = None) -> list[Candidate]:
     from alpaca.data.timeframe import TimeFrame
 
     universe = universe or STOCK_UNIVERSE
-    client = StockHistoricalDataClient(os.getenv("API_KEY"), os.getenv("SECRET_KEY"))
+    client = StockHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
 
     # One batched request for the whole universe — rate-limit friendly
     req = StockBarsRequest(symbol_or_symbols=universe, timeframe=TimeFrame.Day,
